@@ -44,7 +44,7 @@ if section == "Bake Planner":
         "Warm (>24°C)": 3.5
     }
 
-    with st.expander("📝 Input Your Bake Preferences"):
+    with st.expander("📝 Input Your Bake Preferences 🍞"):
         with st.form("bake_plan_form"):
             start_time = st.time_input("When are you starting your bake?", value=time.fromisoformat(values.get("start_time", "14:00")))
             cold_proof = st.checkbox("Cold proof overnight (in fridge)?", value=values.get("cold_proof", True))
@@ -181,8 +181,19 @@ if section == "Bake Planner":
             with st.expander("How to shape the dough"):
                 st.markdown("Flip dough seam-side down. Fold edges to center, flip again, and drag to create surface tension.")
 
+            with st.expander("What it should look like at the autolyse stage"):
+                st.image("media/autolyse.png", caption="In a perfect world")
+
+            with st.expander("What it should look like after bulk fermentation"):
+                st.image("media/post-bulk-ferm.png", caption="In a perfect world")
+
             with st.expander("What it should look like after proof"):
                 st.image("media/perfect-post-proof.png", caption="In a perfect world")
+
+            with st.expander("What it should look like after shaping"):
+                st.image("media/shaping.png", caption="In a perfect world")
+
+
 
 # Placeholder for other tabs
 elif section == "Starter Log":
