@@ -146,7 +146,7 @@ if section == "Bake Planner":
         now = None
         current_time = None
         if active_source and client_now_raw:
-            client_datetime = datetime.fromisoformat(client_now_raw.replace("Z", "+00:00")).astimezone()
+            client_datetime = datetime.fromisoformat(client_now_raw.replace("Z", "+00:00")).astimezone(tz=None)
             bake_start_time = time.fromisoformat(active_source["start_time"])
             now = datetime.combine(client_datetime.date(), bake_start_time).astimezone()
             current_time = client_datetime
