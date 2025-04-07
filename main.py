@@ -42,16 +42,12 @@ st.title("Sourdough Bake Planner")
 if section == "Bake Planner":
     st.header("Plan Your Bake")
 
-    raw_data = controller.get("bake_inputs")
-    saved_data = {}
-
-    if raw_data:
-        try:
-            saved_data = raw_data if isinstance(raw_data, dict) else json.loads(raw_data)
-        except json.JSONDecodeError:
-            saved_data = {}
-
-    values = saved_data
+    try:
+        values = controller.get("bake_inputs")
+        if not isinstance(values, dict):
+            values = json.loads(values or "{}")
+    except Exception:
+        values = {}
 
 
     temp_options = {
