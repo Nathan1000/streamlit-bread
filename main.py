@@ -145,19 +145,32 @@ if section == "Bake Planner":
 
     if active_source:
 
-
         now = None
         current_time = None
-        if active_source and client_now_raw:
-            client_datetime = datetime.fromisoformat(client_now_raw.replace("Z", "+00:00")).astimezone(tz=None)
-            bake_start_time = time.fromisoformat(active_source["start_time"])
-            now = datetime.combine(client_datetime.date(), bake_start_time).astimezone()
-            current_time = client_datetime
+        if active_source:
+            js_expr = """
+            (() => {
+              const d = new Date();
+              const pad = (n) => n.toString().padStart(2, '0');
+              const offset = -d.getTimezoneOffset();
+              const sign = offset >= 0 ? '+' : '-';
+              const hours = pad(Math.floor(Math.abs(offset) / 60));
+              const minutes = pad(Math.abs(offset) % 60);
+              const localIso = d.getFullYear() + '-' +
+                               pad(d.getMonth() + 1) + '-' +
+                               pad(d.getDate()) + 'T' +
+                               pad(d.getHours()) + ':' +
+                               pad(d.getMinutes()) + ':' +
+                               pad(d.getSeconds()) +
+                               sign + hours + ':' + minutes;
+              return localIso;
+            })()
+            """
 
             # Step 1: Evaluate JS with dynamic key
             eval_key = st.session_state.get("refresh_key", "initial")
             client_now_raw = streamlit_js_eval(
-                js_expressions="new Date().toISOString()",
+                js_expressions=js_expr,
                 key=f"local_time_{eval_key}"
             )
 
@@ -175,9 +188,10 @@ if section == "Bake Planner":
 
             # Step 4: Use it if available
             if st.session_state.get("client_now_raw"):
-                current_time = datetime.fromisoformat(
-                    st.session_state["client_now_raw"].replace("Z", "+00:00")
-                ).astimezone()
+                client_datetime = datetime.fromisoformat(st.session_state["client_now_raw"])
+                bake_start_time = time.fromisoformat(active_source["start_time"])
+                now = datetime.combine(client_datetime.date(), bake_start_time).astimezone()
+                current_time = client_datetime
                 st.write("🕒 Current time:", current_time.strftime("%H:%M %Z"))
 
             # Step 5: Only show warning if time still missing and not suppressed
