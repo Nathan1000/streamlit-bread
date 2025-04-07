@@ -6,6 +6,8 @@ import json
 import openai
 import base64
 import mimetypes
+from streamlit_js_eval import streamlit_js_eval
+
 st.set_page_config(layout="wide")
 
 # Init cookie controller
@@ -117,7 +119,10 @@ if section == "Bake Planner":
         shape_end = bulk_end + timedelta(minutes=30)
 
         # Highlighting current step
-        current_time = datetime.now()
+        client_now = streamlit_js_eval(js_expressions="new Date().toISOString()", key="local_time")
+        if client_now:
+            current_time = datetime.fromisoformat(client_now.replace("Z", "+00:00"))
+
         def highlight(timepoint, label):
             return f"**:green[{timepoint.strftime('%H:%M')} – {label}]**" if timepoint <= current_time else f"**{timepoint.strftime('%H:%M')}** – {label}"
 
