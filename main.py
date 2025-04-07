@@ -141,10 +141,8 @@ if section == "Bake Planner":
             "cold_proof_hours": cold_proof_hours
         }
 
-        try:
+        if controller.getAll() is not None:
             controller.set("bake_inputs", json.dumps(input_data), max_age=30 * 24 * 60 * 60)
-        except TypeError:
-            st.stop()
 
     active_source = values if not submit else input_data
     client_now_raw = streamlit_js_eval(js_expressions="new Date().toISOString()", key="client_time_key")
