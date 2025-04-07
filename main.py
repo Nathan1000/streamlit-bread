@@ -192,17 +192,20 @@ if section == "Bake Planner":
                 bake_start_time = time.fromisoformat(active_source["start_time"])
                 now = datetime.combine(client_datetime.date(), bake_start_time).astimezone()
                 current_time = client_datetime
-                st.write("🕒 Current time:", current_time.strftime("%H:%M %Z"))
+                st.write("🕒 Current time:", current_time.strftime("%H:%M"))
 
             # Step 5: Only show warning if time still missing and not suppressed
             elif not st.session_state.get("suppress_warning"):
                 st.warning("Client time not yet available. Click 'Refresh Times'.")
 
-            autolyse_end = now + timedelta(minutes=60)
-            bulk_end = autolyse_end + timedelta(hours=float(active_source["bulk_override"]))
-            fold_interval = float(active_source["bulk_override"]) * 60 / 3
-            fold_times = [autolyse_end + timedelta(minutes=i * fold_interval) for i in range(3)]
-            shape_end = bulk_end + timedelta(minutes=30)
+            try:
+                autolyse_end = now + timedelta(minutes=60)
+                bulk_end = autolyse_end + timedelta(hours=float(active_source["bulk_override"]))
+                fold_interval = float(active_source["bulk_override"]) * 60 / 3
+                fold_times = [autolyse_end + timedelta(minutes=i * fold_interval) for i in range(3)]
+                shape_end = bulk_end + timedelta(minutes=30)
+            except TypeError:
+                st.stop()  # Suppresses error and exits early if 'now' is None
 
         timeline_rows=[]
 
