@@ -1,3 +1,5 @@
 streamlit
+pandas
 streamlit-cookies-controller
 openai
+streamlit-js-eval
