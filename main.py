@@ -197,8 +197,8 @@ if section == "Bake Planner":
             if current_time:
                 if current_time >= timepoint:
                     icon = "✅"
-                elif not any("🟠" in row["Time"] for row in timeline_rows):
-                    icon = "🟠"  # First future row = next step
+                elif not any("➡️" in row["Time"] for row in timeline_rows):
+                    icon = "➡️"  # First future row = next step
                 else:
                     icon = ""
             else:
