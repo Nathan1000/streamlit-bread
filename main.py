@@ -1,6 +1,7 @@
 import streamlit as st
+import pandas as pd
 from streamlit_cookies_controller import CookieController
-from datetime import time, datetime, timedelta
+from datetime import time, datetime, timedelta, timezone
 import time as time2
 import json
 import openai
@@ -9,7 +10,21 @@ import mimetypes
 from streamlit_js_eval import streamlit_js_eval
 
 st.set_page_config(layout="wide")
-
+st.markdown("""
+    <style>
+    div[data-testid="stForm"] {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+    }
+    .st-key-local_time_initial,
+.st-key-client_time_key {
+    height: 0 !important;
+    overflow: hidden;
+    padding: 0 !important;
+    margin: 0 !important;
+    </style>
+""", unsafe_allow_html=True)
 # Init cookie controller
 controller = CookieController()
 
@@ -17,8 +32,6 @@ controller = CookieController()
 st.sidebar.title("Sourdough Baking Assistant")
 section = st.sidebar.radio("Go to", [
     "Bake Planner",
-    "Starter Log",
-    "Hydration Calculator",
     "Troubleshooting"
 ])
 
@@ -33,12 +46,6 @@ if section == "Bake Planner":
     saved_data = controller.get("bake_inputs")
     values = saved_data if isinstance(saved_data, dict) else json.loads(saved_data) if saved_data else {}
 
-    if values:
-        if st.button("Start Again - clear timeline"):
-            controller.remove("bake_inputs")
-            st.session_state.clear()
-            time2.sleep(1)
-            st.rerun()
 
     temp_options = {
         "Cold (<20°C)": 5.0,
@@ -46,9 +53,11 @@ if section == "Bake Planner":
         "Warm (>24°C)": 3.5
     }
 
-    with st.expander("📝 Input Your Bake Preferences 🍞"):
+    st.write('Fill in the form to plan your bake. The default settings are ideal for a first-timer - you just need to fill in your start time, estimate your room temperature and add the type of flour you use in your starter')
+
+    with st.expander("Enter your plan"):
         with st.form("bake_plan_form"):
-            start_time = st.time_input("When are you starting your bake?", value=time.fromisoformat(values.get("start_time", "14:00")))
+            start_time = st.time_input("When are you starting your bake?", value=time.fromisoformat(values.get("start_time", "16:30")))
             cold_proof = st.checkbox("Cold proof overnight (in fridge)?", value=values.get("cold_proof", True))
 
             flour_type = st.selectbox("Type of Flour", [
@@ -71,7 +80,7 @@ if section == "Bake Planner":
                 "Rye Starter",
                 "Whole Wheat Starter",
                 "Unknown"
-            ], index=["White Starter","Rye Starter","Whole Wheat Starter","Unknown"].index(values.get("starter_type", "White Starter")))
+            ], index=["White Starter","Rye Starter","Whole Wheat Starter","Unknown"].index(values.get("starter_type", "Rye Starter")))
 
             room_temp = st.selectbox("Room Temperature", list(temp_options.keys()), index=list(temp_options.keys()).index(values.get("room_temp", "Moderate (20–24°C)")))
             default_bulk_hours = temp_options[room_temp]
@@ -85,6 +94,24 @@ if section == "Bake Planner":
                 help="You can extend bulk slightly if dough isn’t jiggly or bubbly yet"
             )
 
+            hydration = st.slider(
+                "Hydration %",
+                min_value=60,
+                max_value=85,
+                value=int(values.get("hydration", 70)),
+                step=1,
+                help="Higher hydration means wetter dough. 70% is a good starting point for beginners."
+            )
+
+            loaf_size = st.slider(
+                "Weight of Flour",
+                min_value=250,
+                max_value=700,
+                value=int(values.get("loaf_size", 500)),
+                step=50,
+                help="This will be used to work out the ratio of flour to water, based on your hydration level"
+            )
+
             cold_proof_hours = st.slider(
                 "Adjust Cold Proof Duration (hours)",
                 min_value=6,
@@ -95,7 +122,6 @@ if section == "Bake Planner":
             ) if cold_proof else None
 
             submit = st.form_submit_button("Generate Bake Timeline")
-
     if submit:
         input_data = {
             "start_time": start_time.isoformat(),
@@ -105,37 +131,96 @@ if section == "Bake Planner":
             "starter_type": starter_type,
             "room_temp": room_temp,
             "bulk_override": bulk_override,
+            "hydration": hydration,
+            "loaf_size": loaf_size,
             "cold_proof_hours": cold_proof_hours
         }
         controller.set("bake_inputs", json.dumps(input_data), max_age=30*24*60*60)
 
     active_source = values if not submit else input_data
+    client_now_raw = streamlit_js_eval(js_expressions="new Date().toISOString()", key="client_time_key")
+
     if active_source:
-        now = datetime.combine(datetime.today(), time.fromisoformat(active_source["start_time"]))
-        autolyse_end = now + timedelta(minutes=60)
-        bulk_end = autolyse_end + timedelta(hours=float(active_source["bulk_override"]))
-        fold_interval = float(active_source["bulk_override"]) * 60 / 3
-        fold_times = [autolyse_end + timedelta(minutes=i * fold_interval) for i in range(3)]
-        shape_end = bulk_end + timedelta(minutes=30)
 
-        # Highlighting current step
-        client_now = streamlit_js_eval(js_expressions="new Date().toISOString()", key="local_time")
-        if client_now:
-            current_time = datetime.fromisoformat(client_now.replace("Z", "+00:00"))
 
-        def highlight(timepoint, label):
-            return f"**:green[{timepoint.strftime('%H:%M')} – {label}]**" if timepoint <= current_time else f"**{timepoint.strftime('%H:%M')}** – {label}"
+        now = None
+        current_time = None
+        if active_source and client_now_raw:
+            client_datetime = datetime.fromisoformat(client_now_raw.replace("Z", "+00:00")).astimezone()
+            bake_start_time = time.fromisoformat(active_source["start_time"])
+            now = datetime.combine(client_datetime.date(), bake_start_time).astimezone()
+            current_time = client_datetime
+
+            # Step 1: Evaluate JS with dynamic key
+            eval_key = st.session_state.get("refresh_key", "initial")
+            client_now_raw = streamlit_js_eval(
+                js_expressions="new Date().toISOString()",
+                key=f"local_time_{eval_key}"
+            )
+
+            # Step 2: Refresh button sets new key + clears old time
+            if st.button("Refresh Times", type="primary"):
+                st.session_state["refresh_key"] = str(time2.time())
+                st.session_state["client_now_raw"] = None
+                st.session_state["suppress_warning"] = True
+                st.rerun()
+
+            # Step 3: Store JS eval result
+            if client_now_raw and client_now_raw != st.session_state.get("client_now_raw"):
+                st.session_state["client_now_raw"] = client_now_raw
+                st.session_state["suppress_warning"] = False
+
+            # Step 4: Use it if available
+            if st.session_state.get("client_now_raw"):
+                current_time = datetime.fromisoformat(
+                    st.session_state["client_now_raw"].replace("Z", "+00:00")
+                ).astimezone()
+                st.write("🕒 Current time:", current_time.strftime("%H:%M %Z"))
+
+            # Step 5: Only show warning if time still missing and not suppressed
+            elif not st.session_state.get("suppress_warning"):
+                st.warning("Client time not yet available. Click 'Refresh Times'.")
+
+            autolyse_end = now + timedelta(minutes=60)
+            bulk_end = autolyse_end + timedelta(hours=float(active_source["bulk_override"]))
+            fold_interval = float(active_source["bulk_override"]) * 60 / 3
+            fold_times = [autolyse_end + timedelta(minutes=i * fold_interval) for i in range(3)]
+            shape_end = bulk_end + timedelta(minutes=30)
+
+        timeline_rows=[]
+
+
+        def row(timepoint, label):
+            if current_time:
+                if current_time >= timepoint:
+                    icon = "✅"
+                elif not any("🟠" in row["Time"] for row in timeline_rows):
+                    icon = "🟠"  # First future row = next step
+                else:
+                    icon = ""
+            else:
+                icon = ""
+
+            time_str = f"{icon} {timepoint.strftime('%H:%M')}".strip()
+            timeline_rows.append({"Time": time_str, "Step": label})
 
         cols = st.columns([2, 1])
-
+        loaf_size = active_source.get("loaf_size", 500)
+        hydration = active_source.get("hydration", 70) / 100
+        water = round(loaf_size * hydration)
+        starter = round(loaf_size * 0.2)
+        salt = round(loaf_size * 0.02)
         with cols[0]:
-            st.subheader("Your Bake Schedule")
-            st.markdown(highlight(now, "Mix flour & water (Autolyse)"))
-            st.markdown(highlight(autolyse_end, "Add starter and salt, begin bulk fermentation"))
+
+
+            row(now, f"Mix {loaf_size}g flour + {water}g water (autolyse)")
+            row(autolyse_end, f"Add {starter}g starter + {salt}g salt, start bulk fermentation")
+
             for i, ft in enumerate(fold_times, 1):
-                st.markdown(highlight(ft, f"Stretch & fold #{i}"))
-            st.markdown(highlight(bulk_end, "End of bulk fermentation"))
-            st.markdown(highlight(shape_end, "Shape the dough"))
+                row(ft, f"Stretch & fold #{i}")
+
+            row(bulk_end, "End of bulk fermentation")
+            row(shape_end, "Shape the dough")
 
             if active_source["cold_proof"]:
                 next_day = shape_end + timedelta(hours=int(active_source["cold_proof_hours"]))
@@ -144,12 +229,12 @@ if section == "Bake Planner":
                 cool_time = bake_time + timedelta(minutes=45)
                 eat_time = cool_time + timedelta(minutes=90)
 
-                st.markdown(highlight(shape_end, "Place in fridge for overnight proof"))
-                st.markdown("\n**------- Next Day -------**")
-                st.markdown(highlight(preheat_time, "Preheat oven to 250°C with baking vessel inside"))
-                st.markdown(highlight(preheat_time + timedelta(minutes=45), "Score and bake: 20 mins with lid, 20–25 mins without"))
-                st.markdown(highlight(cool_time, "Remove from oven and leave to cool for at least an hour"))
-                st.markdown(highlight(eat_time, "Eat and enjoy!"))
+                row(shape_end, "Place in fridge for overnight proof")
+                timeline_rows.append({"Time": "—— Next Day ——", "Step": ""})
+                row(preheat_time, "Preheat oven to 250°C with baking vessel inside")
+                row(bake_time, "Score and bake: 20 mins with lid, 20–25 mins without")
+                row(cool_time, "Remove from oven and let cool at least 1 hour")
+                row(eat_time, "Eat and enjoy!")
             else:
                 warm_proof_end = shape_end + timedelta(hours=3)
                 preheat_time = warm_proof_end - timedelta(minutes=45)
@@ -157,18 +242,42 @@ if section == "Bake Planner":
                 cool_time = bake_time + timedelta(minutes=45)
                 eat_time = cool_time + timedelta(minutes=90)
 
-                st.markdown(highlight(shape_end, "Start room temp proof (~3 hrs)"))
-                st.markdown(highlight(preheat_time, "Preheat oven to 250°C with baking vessel inside"))
-                st.markdown(highlight(bake_time, "Score and bake: 20 mins with lid, 20–25 mins without"))
-                st.markdown(highlight(cool_time, "Remove from oven and leave to cool for at least an hour"))
-                st.markdown(highlight(eat_time, "Eat and enjoy!"))
+                row(shape_end, "Start room temp proof (~3 hrs)")
+                row(preheat_time, "Preheat oven to 250°C with baking vessel inside")
+                row(bake_time, "Score and bake: 20 mins with lid, 20–25 mins without")
+                row(cool_time, "Remove from oven and let cool at least 1 hour")
+                row(eat_time, "Eat and enjoy!")
+
+            df = pd.DataFrame(timeline_rows)
+            row_height = 35  # Approximate row height in px
+            header_height = 38
+            buffer = 0  # Extra padding
+
+            dynamic_height = len(df) * row_height + header_height + buffer
+
+            st.dataframe(
+                df,
+                use_container_width=True,
+                hide_index=True,
+                height=dynamic_height
+            )
+
+            if values:
+                if st.button("Start Again - clear timeline"):
+                    controller.remove("bake_inputs")
+                    st.session_state.clear()
+                    time2.sleep(1)
+                    st.rerun()
+
+
 
             st.markdown("---")
-            st.subheader("Bake Preferences")
+            st.subheader("Your Bake")
             st.markdown(f"**Flour Type:** {active_source['flour_type']}")
             st.markdown(f"**Bake Vessel:** {active_source['bake_vessel']}")
             st.markdown(f"**Starter Type:** {active_source['starter_type']}")
             st.markdown(f"**Room Temp:** {active_source['room_temp']}")
+            st.markdown(f"**Weights:** {water}g of Water with {loaf_size}g of flour, {salt}g of salt and {starter}g of starter :")
             st.markdown(f"**Bulk Fermentation Time Adjusted to:** {active_source['bulk_override']} hours")
             if active_source["cold_proof"]:
                 st.markdown(f"**Cold Proof Duration:** {active_source['cold_proof_hours']} hours")
@@ -201,13 +310,7 @@ if section == "Bake Planner":
 
 
 # Placeholder for other tabs
-elif section == "Starter Log":
-    st.header("Starter Log")
-    st.info("Coming soon...")
 
-elif section == "Hydration Calculator":
-    st.header("Hydration Calculator")
-    st.info("Coming soon...")
 
 elif section == "Troubleshooting":
     st.header("Troubleshooting Guide")
@@ -273,6 +376,7 @@ elif section == "Troubleshooting":
 
         # Send to OpenAI
         openai.api_key = st.session_state["openai_api_key"]
+        bake_context = active_source if "active_source" in locals() else controller.get("bake_inputs")
         with st.spinner("Thinking like a sourdough expert..."):
             try:
                 response = openai.chat.completions.create(
@@ -283,6 +387,7 @@ elif section == "Troubleshooting":
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": user_message},
+                                {"type": "text", "text": f"Bake context:\n{json.dumps(bake_context or {}, indent=2)}"},
                                 {"type": "image_url", "image_url": {"url": image_url}}
                             ]
                         }
