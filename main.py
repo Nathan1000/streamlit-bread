@@ -43,8 +43,9 @@ if section == "Bake Planner":
     st.header("Plan Your Bake")
 
     # Load cookie values if available
-    saved_data = controller.get("bake_inputs") or {}
-    values = saved_data if isinstance(saved_data, dict) else json.loads(saved_data or "{}")
+    raw_data = controller.get("bake_inputs")
+    saved_data = raw_data if raw_data else "{}"
+    values = saved_data if isinstance(saved_data, dict) else json.loads(saved_data)
 
 
     temp_options = {
