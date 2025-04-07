@@ -25,6 +25,7 @@ st.markdown("""
     margin: 0 !important;
     </style>
 """, unsafe_allow_html=True)
+
 # Init cookie controller
 controller = CookieController()
 if not controller.getAll():
@@ -142,6 +143,7 @@ if section == "Bake Planner":
         }
 
         if controller.getAll() is not None:
+            time.sleep(0.1)  # small delay
             controller.set("bake_inputs", json.dumps(input_data), max_age=30 * 24 * 60 * 60)
 
     active_source = values if not submit else input_data
