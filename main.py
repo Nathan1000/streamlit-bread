@@ -314,6 +314,7 @@ if section == "Bake Planner":
 
 elif section == "Troubleshooting":
     st.header("Troubleshooting Guide")
+    st.write("Choose the issue you're having from the dropdown and upload an image of your dough at its current stage. You will then get suggestions of how to fix your issue based on your specific bake. (Requires OpenAI Key) ")
 
     if "openai_api_key" not in st.session_state:
         st.session_state["openai_api_key"] = ""
