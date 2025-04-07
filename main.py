@@ -18,7 +18,7 @@ st.markdown("""
         padding: 0;
     }
     .st-key-local_time_initial,
-.st-key-client_time_key {
+[class^="st-key-local_time_"] {
     height: 0 !important;
     overflow: hidden;
     padding: 0 !important;
@@ -27,6 +27,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # Init cookie controller
 controller = CookieController()
+if not controller.getAll():
+    st.stop()
 
 # Sidebar navigation
 st.sidebar.title("Sourdough Baking Assistant")
@@ -425,8 +427,3 @@ elif section == "Troubleshooting":
         st.warning("Please enter your OpenAI API key above.")
     elif not uploaded_image:
         st.info("Upload an image above to get started.")
-    if st.button("🔄 Start Over (clear form + image)"):
-        for key in ["selected_stage", "selected_issue", "uploaded_image"]:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()
