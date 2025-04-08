@@ -63,7 +63,10 @@ if section == "Bake Planner":
 
     with st.expander("Enter your plan"):
         with st.form("bake_plan_form"):
-            start_time = st.time_input("When are you starting your bake?", value=time.fromisoformat(values.get("start_time", "16:30")))
+            default_dt = datetime.fromisoformat(values.get("start_time")) if values.get(
+                "start_time") else datetime.now().replace(hour=16, minute=30)
+            start_time = st.time_input("When are you starting your bake?", value=default_dt.time())
+
             cold_proof = st.checkbox("Cold proof overnight (in fridge)?", value=values.get("cold_proof", True))
 
             flour_type = st.selectbox("Type of Flour", [
@@ -130,7 +133,7 @@ if section == "Bake Planner":
             submit = st.form_submit_button("Generate Bake Timeline")
     if submit:
         input_data = {
-            "start_time": start_time.isoformat(),
+            "start_time": datetime.combine(datetime.now().date(), start_time).isoformat(),
             "cold_proof": cold_proof,
             "flour_type": flour_type,
             "bake_vessel": bake_vessel,
@@ -195,8 +198,8 @@ if section == "Bake Planner":
             # Step 4: Use it if available
             if st.session_state.get("client_now_raw"):
                 client_datetime = datetime.fromisoformat(st.session_state["client_now_raw"])
-                bake_start_time = time.fromisoformat(active_source["start_time"])
-                now = datetime.combine(client_datetime.date(), bake_start_time).astimezone()
+                bake_start_dt = datetime.fromisoformat(active_source["start_time"])
+                now = bake_start_dt.astimezone()
                 current_time = client_datetime
                 st.write("🕒 Current time:", current_time.strftime("%H:%M"))
 
